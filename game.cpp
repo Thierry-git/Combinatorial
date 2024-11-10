@@ -171,7 +171,7 @@ Game Game::operator-() const {
 		return it->second;
 
 	// Not cached
-	// Compute addition
+	// Compute negation
 	Game::GameOptions negL, negR;
 	for (const Game& Gl : L())
 		negL.insert(-Gl);
@@ -193,13 +193,28 @@ Game operator-(const Game& G, const Game& H) { return G + (-H); }
 // Comparisons
 
 bool operator<=(const Game& G, const Game& H) {
-	// TODO: Memoize
+	auto key = std::make_pair(G.impl_.get(), H.impl_.get());
+
+	// Static cache
+	static std::unordered_map<std::pair<const Game::GameImpl*, const Game::GameImpl*>,
+		bool, Game::PairHash, Game::PairEqual> leqCache;
+	static std::recursive_mutex cacheMutex;
+
+	std::lock_guard<std::recursive_mutex> lock(cacheMutex);
+
+	// Check cache
+	auto it = leqCache.find(key);
+	if (it != leqCache.end())
+		return it->second;
+
+	// Not cached
+	// Compute comparison
 	for (const Game& Gl : G.L())
-		if (H <= Gl) return false;
+		if (H <= Gl) { leqCache.emplace(key, false); return false; }
 	for (const Game& Hr : H.R())
-		if (Hr <= G) return false;
+		if (Hr <= G) { leqCache.emplace(key, false); return false; }
 	// G <= H iff we disprove the existence statements
-	return true;
+	leqCache.emplace(key, true); return true;
 }
 
 bool operator>=(const Game& G, const Game& H) { return H <= G; }
