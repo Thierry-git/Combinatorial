@@ -87,19 +87,36 @@ Game::Game(std::shared_ptr<const GameImpl> impl, const std::string label)
 : impl_(std::move(impl))
 , label_(label) {}
 
+// Binary operators hash
 struct Game::PairHash {
 	std::size_t operator()(const std::pair<const Game::GameImpl*, const Game::GameImpl*>& p) const noexcept {
 		std::size_t h1 = std::hash<const Game::GameImpl*>{}(p.first);
 		std::size_t h2 = std::hash<const Game::GameImpl*>{}(p.second);
-		return h1 ^ (h2 << 1); // Combine hashes
+		return h1 ^ (h2 << 1); // Combine hashes symmetrically
 	}
 };
 
+// Structural equality
 struct Game::PairEqual {
 	bool operator()(const std::pair<const Game::GameImpl*, const Game::GameImpl*>& lhs,
 		const std::pair<const Game::GameImpl*, const Game::GameImpl*>& rhs) const {
 		// Correct because of interning mechanism
 		return lhs.first == rhs.first && lhs.second == rhs.second;
+	}
+};
+
+// Unary operators hash
+struct Game::Hash {
+	std::size_t operator()(const GameImpl* p) const noexcept {
+		return std::hash<const Game::GameImpl*>{}(p);
+	}
+};
+
+// Structural equality
+struct Game::Equal {
+	bool operator()(const GameImpl* lhs, const GameImpl* rhs) const {
+		// Correct because of interning mechanism
+		return lhs == rhs;
 	}
 };
 
@@ -139,19 +156,35 @@ Game operator+(const Game& G, const Game& H) {
 }
 
 Game Game::operator-() const {
-	// TODO: Memoize
+	auto key = impl_.get();
+
+	// Static cache
+	static std::unordered_map<const GameImpl*,
+		Game, Game::Hash, Game::Equal> negationCache;
+	static std::recursive_mutex cacheMutex;
+
+	std::lock_guard<std::recursive_mutex> lock(cacheMutex);
+
+	// Check cache
+	auto it = negationCache.find(key);
+	if (it != negationCache.end())
+		return it->second;
+
+	// Not cached
+	// Compute addition
 	Game::GameOptions negL, negR;
 	for (const Game& Gl : L())
 		negL.insert(-Gl);
 	for (const Game& Gr : R())
 		negR.insert(-Gr);
-	if (label_.empty())
-		return create(negR, negL);
-	else {
-		// std::string newLabel = label_.front() == '-' ? label_.substr(1, label_.size() - 1) : '-' + label_;
-		// return create(negR, negL, newLabel);
-		return create(negR, negL, '-' + label_);
-	}
+
+	Game neg = label_.empty() ? create(negR, negL) : create(negR, negL, '-' + label_);
+
+	// Cache result(s)
+	negationCache.emplace(key, neg);
+	negationCache.emplace(neg.impl_.get(), *this);
+
+	return neg;
 }
 
 Game operator-(const Game& G, const Game& H) { return G + (-H); }

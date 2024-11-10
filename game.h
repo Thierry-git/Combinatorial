@@ -46,8 +46,11 @@ private:
 
 	// Binary operators hash
 	struct PairHash;
-
 	struct PairEqual;
+
+	// Unary hash
+	struct Hash;
+	struct Equal;
 
 public:
 	// Arithmetic
