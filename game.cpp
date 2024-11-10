@@ -131,8 +131,9 @@ Game operator+(const Game& G, const Game& H) {
 	Game::addR(sumR, H, G);
 	Game sum = Game::create(sumL, sumR);
 
-	// Cache result
+	// Cache result(s)
 	additionCache.emplace(key, sum);
+	additionCache.emplace(std::make_pair(key.second, key.first), sum);
 
 	return sum;
 }
